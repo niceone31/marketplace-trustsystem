@@ -1,0 +1,65 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: marketplace-trust-api
+    ports:
+      - "8000:8000"
+    environment:
+      - ENVIRONMENT=development
+      - DEBUG=true
+      - DATABASE_URL=sqlite+aiosqlite:///./marketplace_trust.db
+      - LOG_LEVEL=INFO
+    volumes:
+      - .:/app
+      - api-data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+  ui:
+    image: python:3.11-slim
+    container_name: marketplace-trust-ui
+    working_dir: /app
+    ports:
+      - "8501:8501"
+    volumes:
+      - .:/app
+    environment:
+      - API_URL=http://api:8000/api/v1
+    command: >
+      sh -c "pip install --no-cache-dir streamlit requests plotly pandas &&
+             streamlit run ui/app.py --server.port 8501 --server.address 0.0.0.0"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  db:
+    image: postgres:16-alpine
+    container_name: marketplace-trust-postgres
+    profiles:
+      - postgres
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=marketplace_trust
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d marketplace_trust"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  api-data:
+  postgres-data:
